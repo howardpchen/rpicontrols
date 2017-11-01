@@ -7,16 +7,22 @@ import time
 from subprocess import call
 
 lcd = CharLCD('PCF8574', 0x3f)
+wemo_count = 0
 
 def show(h, degreec):
+    global wemo_count
+
     h_status = "OK"
     t_status = "OK"
-    if h < 30:
+    if (h < 30) and (wemo_count <= 0):
         call(["wemo", "switch", "Humidifier", "on"])
         h_status = "L"
-    elif h > 60:
+        wemo_count = 30
+    elif (h > 60) and (wemo_count <= 0):
         call(["wemo", "switch", "Humidifier", "off"])
         h_status = "H"
+        wemo_count = 30
+
  
     degreef = degreec * 9/5 + 32
     if degreef < 68:
@@ -24,11 +30,12 @@ def show(h, degreec):
     elif degreef > 76:
         t_status = "H"
     
+    wemo_count = max(wemo_count - 1, 0)
+
     lcd.cursor_pos = (0, 0)
     lcd.write_string(" T: %d F (%s)    " % (degreef, t_status))
     lcd.cursor_pos = (1, 0)
     lcd.write_string(" H: %d %% (%s)    " % (h, h_status))
-
 
 # In[2]:
 
@@ -75,10 +82,6 @@ def buttondown(input_pin):
         
 GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=500)
 
-
-# In[ ]:
-
-
 try:
     while True:
         counter = (counter + 1) % samples
@@ -89,7 +92,7 @@ try:
         h = sum(humidity)/len(humidity)
         dc = sum(degreec)/len(degreec)
         show(h, dc)
-        time.sleep(10)
+        time.sleep(50)
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
