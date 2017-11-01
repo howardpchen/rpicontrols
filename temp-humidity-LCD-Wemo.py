@@ -14,12 +14,14 @@ def show(h, degreec):
 
     h_status = "OK"
     t_status = "OK"
-    if (h < 30) and (wemo_count <= 0):
-        call(["wemo", "switch", "Humidifier", "on"])
+    if h < 30:
+        if wemo_count <= 0:
+            call(["wemo", "switch", "Humidifier", "on"])
         h_status = "L"
         wemo_count = 30
-    elif (h > 60) and (wemo_count <= 0):
-        call(["wemo", "switch", "Humidifier", "off"])
+    elif h > 60:
+        if wemo_count <= 0:
+            call(["wemo", "switch", "Humidifier", "off"])
         h_status = "H"
         wemo_count = 30
 
