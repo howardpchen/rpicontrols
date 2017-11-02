@@ -4,7 +4,7 @@ from RPLCD.i2c import CharLCD
 from RPi import GPIO
 import Adafruit_DHT
 import time
-from subprocess import call
+from subprocess import call, check_output
 
 lcd = CharLCD('PCF8574', 0x3f)
 wemo_count = 0
@@ -14,16 +14,17 @@ def show(h, degreec):
 
     h_status = "OK"
     t_status = "OK"
+
     if h < 30:
         if wemo_count <= 0:
             call(["wemo", "switch", "Humidifier", "on"])
         h_status = "L"
         wemo_count = 30
-    elif h > 60:
-        if wemo_count <= 0:
-            call(["wemo", "switch", "Humidifier", "off"])
-        h_status = "H"
+    elif h > 40 and wemo_count <= 0:
+        call(["wemo", "switch", "Humidifier", "off"])
         wemo_count = 30
+    elif h > 60:
+        h_status = "H"
 
  
     degreef = degreec * 9/5 + 32
