@@ -15,14 +15,21 @@ def show(h, degreec):
     h_status = "OK"
     t_status = "OK"
 
-    if h < 30:
-        if wemo_count <= 0:
-            call(["wemo", "switch", "Humidifier", "on"])
+    if h < 40:
         h_status = "L"
-        wemo_count = 30
-    elif h > 40 and wemo_count <= 0:
-        call(["wemo", "switch", "Humidifier", "off"])
-        wemo_count = 30
+        if wemo_count <= 0:
+            try:
+                call(["wemo", "switch", "Humidifier", "on"])
+                wemo_count = 30
+            except:
+                print ("Unexpected error:", sys.exc_info()[0])
+    elif h > 55 and wemo_count <= 0:
+        try: 
+            call(["wemo", "switch", "Humidifier", "off"])
+            wemo_count = 30
+        except:
+            print ("Unexpected error:", sys.exc_info()[0])
+            
     elif h > 60:
         h_status = "H"
 
