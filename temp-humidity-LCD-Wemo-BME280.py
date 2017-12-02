@@ -2,12 +2,22 @@
 # Detect temperature, humidity, display to LCD, and if humidity is below a certain number, turn on Wemo
 from RPLCD.i2c import CharLCD
 from RPi import GPIO
-import Adafruit_DHT
 import time
 from subprocess import call, check_output
+import smbus2
+import bme280
+
+port = 1
+address = 0x76
+bus = smbus2.SMBus(port)
 
 lcd = CharLCD('PCF8574', 0x3f)
 wemo_count = 0
+
+bme280.load_calibration_params(bus, address)
+
+# the sample method will take a single reading and return a
+# compensated_reading object
 
 def show(h, degreec):
     global wemo_count
@@ -62,8 +72,9 @@ lcd.write_string("                     ")
 
 
 samples = 5
-
-h, deg = Adafruit_DHT.read_retry(11, 17)
+data = bme280.sample(bus, address)
+h = data.humidity
+deg = data.temperature
 
 lcd.backlight_enabled = False
 show(h, deg)
@@ -95,9 +106,11 @@ GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=500
 try:
     while True:
         counter = (counter + 1) % samples
+        data = bme280.sample(bus, address)
 
         for i in range(samples):
-           humidity[counter], degreec[counter] = Adafruit_DHT.read_retry(11, 17)
+            humidity[counter] = data.humidity
+            degreec[counter] = data.temperature
 
         h = sum(humidity)/len(humidity)
         dc = sum(degreec)/len(degreec)
