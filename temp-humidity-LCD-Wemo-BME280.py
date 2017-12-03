@@ -7,6 +7,12 @@ from subprocess import call, check_output
 import smbus2
 import bme280
 
+import paho.mqtt.client as mqtt
+import paho.mqtt.publish as publish
+import ssl, socket
+import json
+import config
+
 port = 1
 address = 0x76
 bus = smbus2.SMBus(port)
@@ -16,11 +22,56 @@ wemo_count = 0
 
 bme280.load_calibration_params(bus, address)
 
+
+
+# MQTT Configuration
+# Details for free MQTT service which we are registering data to.
+thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  # 
+
+
+def init_mqtt():
+    client=mqtt.Client()
+    client = mqtt.Client()
+# Register connect callback
+    client.on_connect = on_connect
+# Set access token
+    client.username_pw_set(config.token)
+# Connect to ThingsBoard using default MQTT port and 60 seconds keepalive interval
+    client.connect(thingsboard_server, 1883, 60)
+
+    return client
+
+def mqtt_publish(c, data):
+
+    data_dict = {
+        "humidity": data[0],
+        "temperature": data[1],
+        "pressure": data[2]
+    }
+    result = c.publish('v1/devices/me/telemetry', json.dumps(data_dict), 1)
+    if (result[0] != mqtt.MQTT_ERR_SUCCESS):
+        print("Failed publishing message", txt, ". Error code", result[0])
+    if result[1] >= 20:
+        return init_mqtt()
+    return c
+
+
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect(client, userdata, rc, *extra_params):
+    print('Connected with result code ' + str(rc))
+    # Subscribing to receive RPC requests
+    client.subscribe('v1/devices/me/rpc/request/+')
+
+
+
+# Initialize mqtt connection and return handle
+mqttc = init_mqtt();
+
 # the sample method will take a single reading and return a
 # compensated_reading object
 
-def show(h, degreec):
-    global wemo_count
+def show(h, degreec, pres):
+    global wemo_count, mqttc
 
     h_status = "OK"
     t_status = "OK"
@@ -43,26 +94,22 @@ def show(h, degreec):
     elif h > 60:
         h_status = "H"
 
- 
-    degreef = degreec * 9/5 + 32
+    #Correct for self-heating; approximately 2C  
+    degreef = (degreec-2) * 9/5 + 32
+
     if degreef < 68:
         t_status = "L"
     elif degreef > 76:
         t_status = "H"
-    
+
     wemo_count = max(wemo_count - 1, 0)
 
     lcd.cursor_pos = (0, 0)
-    lcd.write_string(" T: %d F (%s)    " % (degreef, t_status))
+    lcd.write_string(" %2.1fF  %dhPa " % (degreef, pres))
     lcd.cursor_pos = (1, 0)
-    lcd.write_string(" H: %d %% (%s)    " % (h, h_status))
+    lcd.write_string(" %d%% Hum. (%s)    " % (h, h_status))
+    mqttc = mqtt_publish(mqttc, (h, degreef, pres))
 
-# In[2]:
-
-
-
-
-# In[3]:
 
 
 lcd.cursor_pos = (0, 0)
@@ -71,16 +118,18 @@ lcd.cursor_pos = (1, 0)
 lcd.write_string("                     ")
 
 
-samples = 5
+samples = 1
 data = bme280.sample(bus, address)
 h = data.humidity
 deg = data.temperature
+pres = data.pressure
 
 lcd.backlight_enabled = False
-show(h, deg)
+show(h, deg, pres)
 
 humidity = [h]*samples
 degreec = [deg]*samples
+pressure = [pres]*samples
 
 counter = 0
 
@@ -111,11 +160,13 @@ try:
         for i in range(samples):
             humidity[counter] = data.humidity
             degreec[counter] = data.temperature
+            pressure[counter] = data.pressure
 
         h = sum(humidity)/len(humidity)
         dc = sum(degreec)/len(degreec)
-        show(h, dc)
-        time.sleep(50)
+        pr = sum(pressure)/len(pressure)
+        show(h, dc, pr)
+        time.sleep(10)
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
