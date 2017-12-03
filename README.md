@@ -1,5 +1,6 @@
 # rpicontrols
 
 Required packages:
-`sudo pip install RPLCD`
+
+`sudo pip3 install RPLCD paho-mqtt bme280`
 
