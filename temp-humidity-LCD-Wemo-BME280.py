@@ -12,6 +12,7 @@ import paho.mqtt.publish as publish
 import ssl, socket
 import json
 import config
+import sys
 
 port = 1
 address = 0x76
@@ -37,8 +38,12 @@ def init_mqtt():
 # Set access token
     client.username_pw_set(config.token)
 # Connect to ThingsBoard using default MQTT port and 60 seconds keepalive interval
-    client.connect(thingsboard_server, 1883, 60)
-
+    no_conn = True
+    try: 
+        client.connect(thingsboard_server, 1883, 60)
+    except:
+        print("Cannot establish connection to MQTT server. Trying again later.")
+        return None
     return client
 
 def mqtt_publish(c, data):
@@ -50,7 +55,7 @@ def mqtt_publish(c, data):
     }
     result = c.publish('v1/devices/me/telemetry', json.dumps(data_dict), 1)
     if (result[0] != mqtt.MQTT_ERR_SUCCESS):
-        print("Failed publishing message", txt, ". Error code", result[0])
+        print("Failed publishing data", ". Error code", result[0])
     if result[1] >= 20:
         return init_mqtt()
     return c
@@ -84,12 +89,14 @@ def show(h, degreec, pres):
                 wemo_count = 30
             except:
                 print ("Unexpected error:", sys.exc_info()[0])
+                pass
     elif h > 55 and wemo_count <= 0:
         try: 
             call(["wemo", "switch", "Humidifier", "off"])
             wemo_count = 30
         except:
             print ("Unexpected error:", sys.exc_info()[0])
+            pass
             
     elif h > 60:
         h_status = "H"
@@ -104,11 +111,15 @@ def show(h, degreec, pres):
 
     wemo_count = max(wemo_count - 1, 0)
 
-    lcd.cursor_pos = (0, 0)
+    lcd.clear()
+    lcd.home()
     lcd.write_string(" %2.1fF  %dhPa " % (degreef, pres))
     lcd.cursor_pos = (1, 0)
     lcd.write_string(" %d%% Hum. (%s)    " % (h, h_status))
-    mqttc = mqtt_publish(mqttc, (h, degreef, pres))
+    if (mqttc):
+        mqttc = mqtt_publish(mqttc, (h, degreef, pres))
+    else:
+        mqttc = init_mqtt()
 
 
 
