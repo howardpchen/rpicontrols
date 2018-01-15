@@ -18,8 +18,10 @@ port = 1
 address = 0x76
 bus = smbus2.SMBus(port)
 
+tele_sleep = 30 # how often to send data to MQTT in seconds
 lcd = CharLCD('PCF8574', 0x3f)
 wemo_count = 0
+wemo_max = 30   #wemo_max * tele_sleep = max frequency of updating humidifier
 
 bme280.load_calibration_params(bus, address)
 
@@ -76,7 +78,7 @@ mqttc = init_mqtt();
 # compensated_reading object
 
 def show(h, degreec, pres):
-    global wemo_count, mqttc
+    global wemo_count, mqttc, lcd
 
     h_status = "OK"
     t_status = "OK"
@@ -86,14 +88,14 @@ def show(h, degreec, pres):
         if wemo_count <= 0:
             try:
                 call(["wemo", "switch", "Humidifier", "on"])
-                wemo_count = 30
+                wemo_count = wemo_max
             except:
                 print ("Unexpected error:", sys.exc_info()[0])
                 pass
     elif h > 55 and wemo_count <= 0:
         try: 
             call(["wemo", "switch", "Humidifier", "off"])
-            wemo_count = 30
+            wemo_count = wemo_max
         except:
             print ("Unexpected error:", sys.exc_info()[0])
             pass
@@ -111,7 +113,7 @@ def show(h, degreec, pres):
 
     wemo_count = max(wemo_count - 1, 0)
 
-    lcd.clear()
+    #lcd = CharLCD('PCF8574', 0x3f)
     lcd.home()
     lcd.write_string(" %2.1fF  %dhPa " % (degreef, pres))
     lcd.cursor_pos = (1, 0)
@@ -129,7 +131,7 @@ lcd.cursor_pos = (1, 0)
 lcd.write_string("                     ")
 
 
-samples = 1
+samples = 3
 data = bme280.sample(bus, address)
 h = data.humidity
 deg = data.temperature
@@ -154,6 +156,7 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(button0, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 def buttondown(input_pin):
+    global lcd
     if (input_pin == button0):
         lcd.backlight_enabled = True
         time.sleep(2)
@@ -177,7 +180,7 @@ try:
         dc = sum(degreec)/len(degreec)
         pr = sum(pressure)/len(pressure)
         show(h, dc, pr)
-        time.sleep(10)
+        time.sleep(tele_sleep)
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
