@@ -19,7 +19,6 @@ address = 0x76
 bus = smbus2.SMBus(port)
 
 tele_sleep = 30 # how often to send data to MQTT in seconds
-lcd = CharLCD('PCF8574', 0x3f)
 wemo_count = 0
 wemo_max = 30   #wemo_max * tele_sleep = max frequency of updating humidifier
 
@@ -31,6 +30,9 @@ bme280.load_calibration_params(bus, address)
 # Details for free MQTT service which we are registering data to.
 thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  # 
 
+
+
+displaydata = dict()
 
 def init_mqtt():
     client=mqtt.Client()
@@ -77,8 +79,8 @@ mqttc = init_mqtt();
 # the sample method will take a single reading and return a
 # compensated_reading object
 
-def show(h, degreec, pres):
-    global wemo_count, mqttc, lcd
+def poll(h, degreec, pres):
+    global wemo_count, mqttc, displaydata
 
     h_status = "OK"
     t_status = "OK"
@@ -112,12 +114,11 @@ def show(h, degreec, pres):
         t_status = "H"
 
     wemo_count = max(wemo_count - 1, 0)
+    displaydata['f'] = degreef
+    displaydata['p'] = pres
+    displaydata['h'] = h
+    displaydata['hstat'] = h_status
 
-    #lcd = CharLCD('PCF8574', 0x3f)
-    lcd.home()
-    lcd.write_string(" %2.1fF  %dhPa " % (degreef, pres))
-    lcd.cursor_pos = (1, 0)
-    lcd.write_string(" %d%% Hum. (%s)    " % (h, h_status))
     if (mqttc):
         mqttc = mqtt_publish(mqttc, (h, degreef, pres))
     else:
@@ -125,20 +126,20 @@ def show(h, degreec, pres):
 
 
 
+lcd = CharLCD('PCF8574', 0x3f)
 lcd.cursor_pos = (0, 0)
 lcd.write_string(" Initializing...   ")
 lcd.cursor_pos = (1, 0)
-lcd.write_string("                     ")
+lcd.write_string("                ")
+lcd.backlight_enabled = False
+lcd.close()
 
-
-samples = 3
+samples = 1
 data = bme280.sample(bus, address)
 h = data.humidity
 deg = data.temperature
 pres = data.pressure
 
-lcd.backlight_enabled = False
-show(h, deg, pres)
 
 humidity = [h]*samples
 degreec = [deg]*samples
@@ -146,25 +147,27 @@ pressure = [pres]*samples
 
 counter = 0
 
-
-
 # In[9]:
-
 
 button0=27
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(button0, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 def buttondown(input_pin):
-    global lcd
-    if (input_pin == button0):
-        lcd.backlight_enabled = True
+    global displaydata
+    if (input_pin == button0 and GPIO.input(button0) == 0):
+        lcd = CharLCD('PCF8574', 0x3f)
+        lcd.cursor_pos = (0, 0)
+        lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
+                                              displaydata['p']))
+        lcd.cursor_pos = (1, 0)
+        lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
+                                                displaydata['hstat']))
         time.sleep(2)
-        if (GPIO.input(button0) == 1):
-            lcd.backlight_enabled = False
-
+        lcd.backlight_enabled = False
+        lcd.close()
         
-GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=500)
+GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=200)
 
 try:
     while True:
@@ -179,7 +182,7 @@ try:
         h = sum(humidity)/len(humidity)
         dc = sum(degreec)/len(degreec)
         pr = sum(pressure)/len(pressure)
-        show(h, dc, pr)
+        poll(h, dc, pr)
         time.sleep(tele_sleep)
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
