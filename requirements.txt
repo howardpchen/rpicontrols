@@ -1,3 +1,4 @@
 paho-mqtt
-bme280
 RPLCD
+smbus2
+config

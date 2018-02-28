@@ -116,6 +116,7 @@ def poll(h, degreec, pres):
     displaydata['p'] = pres
     displaydata['h'] = h
     displaydata['hstat'] = h_status
+    print(displaydata)
 
     if (mqttc):
         mqttc = mqtt_publish(mqttc, (h, degreef, pres))
@@ -123,14 +124,14 @@ def poll(h, degreec, pres):
         mqttc = init_mqtt()
 
 
-
-lcd = CharLCD('PCF8574', 0x3f)
-lcd.cursor_pos = (0, 0)
-lcd.write_string(" Initializing...   ")
-lcd.cursor_pos = (1, 0)
-lcd.write_string("                ")
-lcd.backlight_enabled = False
-lcd.close()
+print("Initializing")
+# lcd = CharLCD('PCF8574', 0x3f)
+# lcd.cursor_pos = (0, 0)
+# lcd.write_string(" Initializing...   ")
+# lcd.cursor_pos = (1, 0)
+# lcd.write_string("                ")
+# lcd.backlight_enabled = False
+# lcd.close()
 
 samples = 1
 data = bme280.sample(bus, address)
@@ -153,17 +154,19 @@ GPIO.setup(button0, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 def buttondown(input_pin):
     global displaydata
+    print("Button Down")
     if (input_pin == button0 and GPIO.input(button0) == 0):
-        lcd = CharLCD('PCF8574', 0x3f)
-        lcd.cursor_pos = (0, 0)
-        lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
-                                              displaydata['p']))
-        lcd.cursor_pos = (1, 0)
-        lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
-                                                displaydata['hstat']))
+        print (displaydata)
+        # lcd = CharLCD('PCF8574', 0x3f)
+        # lcd.cursor_pos = (0, 0)
+        # lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
+                                              # displaydata['p']))
+        # lcd.cursor_pos = (1, 0)
+        # lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
+                                                # displaydata['hstat']))
         time.sleep(5)
-        lcd.backlight_enabled = False
-        lcd.close()
+        # lcd.backlight_enabled = False
+        # lcd.close()
         
 GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=200)
 
