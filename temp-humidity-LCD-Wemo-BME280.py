@@ -24,8 +24,6 @@ wemo_max = 30   #wemo_max * tele_sleep = max frequency of updating humidifier
 
 bme280.load_calibration_params(bus, address)
 
-
-
 # MQTT Configuration
 # Details for free MQTT service which we are registering data to.
 thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  # 
@@ -163,7 +161,7 @@ def buttondown(input_pin):
         lcd.cursor_pos = (1, 0)
         lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
                                                 displaydata['hstat']))
-        time.sleep(2)
+        time.sleep(5)
         lcd.backlight_enabled = False
         lcd.close()
         
@@ -172,13 +170,15 @@ GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=200
 try:
     while True:
         counter = (counter + 1) % samples
-        data = bme280.sample(bus, address)
-
-        for i in range(samples):
-            humidity[counter] = data.humidity
-            degreec[counter] = data.temperature
-            pressure[counter] = data.pressure
-
+        try:
+            data = bme280.sample(bus, address)
+            for i in range(samples):
+                humidity[counter] = data.humidity
+                degreec[counter] = data.temperature
+                pressure[counter] = data.pressure
+        except:
+            print ("Error sampling data.  Maybe reset bus and try again... ")
+            bus = smbus2.SMBus(port)
         h = sum(humidity)/len(humidity)
         dc = sum(degreec)/len(degreec)
         pr = sum(pressure)/len(pressure)
