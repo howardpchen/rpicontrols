@@ -182,7 +182,7 @@ class distanceThread(threading.Thread):
     def run(self):
         global tof
         print ("Starting distance sensor thread")
-        tof.start_ranging()
+        tof.start_ranging(VL53L0X.VL53L0X_BEST_ACCURACY_MODE)
         while(True):
             d = tof.get_distance()
             ##print(">>>>%d mm distance" % d)
