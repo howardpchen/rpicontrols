@@ -2,6 +2,8 @@
 # Detect temperature, humidity, display to LCD, and if humidity is below a certain number, turn on Wemo
 from RPLCD.i2c import CharLCD
 from RPi import GPIO
+import VL53L0X
+import threading
 import time
 from subprocess import call, check_output
 import smbus2
@@ -13,10 +15,11 @@ import ssl, socket
 import json
 import config
 import sys
-
+tof = VL53L0X.VL53L0X()
 port = 1
 address = 0x76
 bus = smbus2.SMBus(port)
+
 
 tele_sleep = 30 # how often to send data to MQTT in seconds
 wemo_count = 0
@@ -27,7 +30,6 @@ bme280.load_calibration_params(bus, address)
 # MQTT Configuration
 # Details for free MQTT service which we are registering data to.
 thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  # 
-
 
 
 displaydata = dict()
@@ -90,14 +92,14 @@ def poll(h, degreec, pres):
                 call(["wemo", "switch", "Humidifier", "on"])
                 wemo_count = wemo_max
             except:
-                print ("Unexpected error:", sys.exc_info()[0])
+                print ("Unexpected error[0]:", sys.exc_info()[0])
                 pass
     elif h > 55 and wemo_count <= 0:
         try: 
             call(["wemo", "switch", "Humidifier", "off"])
             wemo_count = wemo_max
         except:
-            print ("Unexpected error:", sys.exc_info()[0])
+            print ("Unexpected error[1]:", sys.exc_info()[0])
             pass
             
     elif h > 60:
@@ -151,9 +153,9 @@ button0=17
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(button0, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-def buttondown(input_pin):
+def showdata():
     global displaydata
-    if (input_pin == button0 and GPIO.input(button0) == 0):
+    try:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
         lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
@@ -161,11 +163,54 @@ def buttondown(input_pin):
         lcd.cursor_pos = (1, 0)
         lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
                                                 displaydata['hstat']))
-        time.sleep(5)
-        lcd.backlight_enabled = False
-        lcd.close()
+    except KeyError:
+        lcd = CharLCD('PCF8574', 0x3f)
+        lcd.cursor_pos = (0, 0)
+        lcd.write_string(" Initializing...   ")
+        lcd.cursor_pos = (1, 0)
+        lcd.write_string("                ")
+    time.sleep(3)
+    lcd.backlight_enabled = False
+    lcd.close()
+
+
+def buttondown(input_pin):
+    if (input_pin == button0 and GPIO.input(button0) == 0):
+        showdata()
         
+class distanceThread(threading.Thread):
+    def run(self):
+        global tof
+        print ("Starting distance sensor thread")
+        tof.start_ranging()
+        while(True):
+            d = tof.get_distance()
+            ##print(">>>>%d mm distance" % d)
+
+            # if less than 500 mm (i.e. 50 cm) then trigger
+            if (d < 0):
+                print ("Error getting distance")
+                tof.stop_ranging()
+                tof.start_ranging()
+            if (d < 500):
+                showdata()
+            try: 
+                time.sleep(1)
+            except KeyboardInterrupt:
+                this.stop_ranging()
+
+        print ("Exiting " + self.name)
+    def stop_ranging():
+        global tof
+        tof.stop_ranging()
+        
+    
 GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=200)
+print("creating new thread")
+dist = distanceThread()
+dist.daemon = True
+dist.start()
+print("started new thread")
 
 try:
     while True:
@@ -187,5 +232,5 @@ try:
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
+    distanceThread.stop_ranging()
     GPIO.cleanup()
-

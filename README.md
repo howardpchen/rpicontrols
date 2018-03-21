@@ -14,3 +14,25 @@ Required packages:
 
 `pip install git+https://github.com/syphoxy/ouimeaux.git`
 
+## LIDAR sensor
+`sudo apt-get install build-essential python-dev`
+`git clone https://github.com/johnbryanmoore/VL53L0X_rasp_python.git`
+`cd VL53L0X_rasp_python`
+`make`
+
+You need to then copy the library and the driver py file to the home directory
+
+`cp VL53L0X_rasp_python/python/VL53L0X.py .`
+
+Chang the new copy of the code reflect new path of the bin
+Path may be relative or absolute.
+
+line 68:
+`tof_lib = CDLL("/home/pi/rpicontrols/VL53L0X_rasp_python/bin/vl53l0x_python`
+
+
+
+
+
+
+
