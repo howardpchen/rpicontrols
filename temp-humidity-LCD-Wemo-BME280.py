@@ -232,5 +232,6 @@ try:
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
-    distanceThread.stop_ranging()
+    tof.stop_ranging()
     GPIO.cleanup()
+    sys.exit()

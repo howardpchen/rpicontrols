@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-# Detect temperature, humidity, display to LCD, and if humidity is below a certain number, turn on Wemo
 from RPLCD.i2c import CharLCD
 from RPi import GPIO
+import VL53L0X
+import threading
 import time
 from subprocess import call, check_output
 import smbus2
@@ -13,14 +14,12 @@ import ssl, socket
 import json
 import config
 import sys
-
+tof = VL53L0X.VL53L0X()
 port = 1
 address = 0x76
 bus = smbus2.SMBus(port)
 
-tele_sleep = 30 # how often to send data to MQTT in seconds
-wemo_count = 0
-wemo_max = 30   #wemo_max * tele_sleep = max frequency of updating humidifier
+tele_sleep = 10 # how often to send data to MQTT in seconds
 
 bme280.load_calibration_params(bus, address)
 
@@ -31,6 +30,7 @@ thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  #
 
 
 displaydata = dict()
+displaydata['occ'] = False
 
 def init_mqtt():
     client=mqtt.Client()
@@ -78,28 +78,13 @@ mqttc = init_mqtt();
 # compensated_reading object
 
 def poll(h, degreec, pres):
-    global wemo_count, mqttc, displaydata
+    global mqttc, displaydata
 
     h_status = "OK"
     t_status = "OK"
 
     if h < 40:
         h_status = "L"
-        if wemo_count <= 0:
-            try:
-                call(["wemo", "switch", "Humidifier", "on"])
-                wemo_count = wemo_max
-            except:
-                print ("Unexpected error:", sys.exc_info()[0])
-                pass
-    elif h > 55 and wemo_count <= 0:
-        try: 
-            call(["wemo", "switch", "Humidifier", "off"])
-            wemo_count = wemo_max
-        except:
-            print ("Unexpected error:", sys.exc_info()[0])
-            pass
-            
     elif h > 60:
         h_status = "H"
 
@@ -111,13 +96,10 @@ def poll(h, degreec, pres):
     elif degreef > 76:
         t_status = "H"
 
-    wemo_count = max(wemo_count - 1, 0)
     displaydata['f'] = degreef
     displaydata['p'] = pres
     displaydata['h'] = h
     displaydata['hstat'] = h_status
-    print(displaydata)
-
     if (mqttc):
         mqttc = mqtt_publish(mqttc, (h, degreef, pres))
     else:
@@ -130,7 +112,6 @@ lcd.cursor_pos = (0, 0)
 lcd.write_string(" Initializing...   ")
 lcd.cursor_pos = (1, 0)
 lcd.write_string("                ")
-lcd.backlight_enabled = False
 lcd.close()
 
 samples = 1
@@ -138,7 +119,6 @@ data = bme280.sample(bus, address)
 h = data.humidity
 deg = data.temperature
 pres = data.pressure
-print(data)
 
 humidity = [h]*samples
 degreec = [deg]*samples
@@ -146,29 +126,62 @@ pressure = [pres]*samples
 
 counter = 0
 
-# In[9]:
-
-button0=17
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(button0, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-def buttondown(input_pin):
-    global displaydata
-    print("Button Down")
-    if (input_pin == button0 and GPIO.input(button0) == 0):
-        print (displaydata)
+def showdata():
+    global displaydata, lcd
+    try:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
-        lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
-                                              displaydata['p']))
+        lcd.write_string(" %2.1fF  %d%% Hum.  " % (displaydata['f'],
+                                                   displaydata['h']))
         lcd.cursor_pos = (1, 0)
-        lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
-                                                displaydata['hstat']))
-        time.sleep(5)
-        lcd.backlight_enabled = False
-        lcd.close()
-        
-GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=200)
+        lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ']
+                         else "available "))
+    except KeyError:
+        lcd = CharLCD('PCF8574', 0x3f)
+        lcd.cursor_pos = (0, 0)
+        lcd.write_string(" Initializing...   ")
+        lcd.cursor_pos = (1, 0)
+        lcd.write_string("                ")
+    # time.sleep(3)
+    # lcd.backlight_enabled = False
+    lcd.close()
+
+
+class distanceThread(threading.Thread):
+    def run(self):
+        global tof
+        print ("Starting distance sensor thread")
+        tof.start_ranging(VL53L0X.VL53L0X_BEST_ACCURACY_MODE)
+        while(True):
+            d = tof.get_distance()
+            ##print(">>>>%d mm distance" % d)
+            # if less than 500 mm (i.e. 50 cm) then trigger
+            prev = displaydata['occ']
+            if (d < 0):
+                print ("Error getting distance")
+                tof.stop_ranging()
+                tof.start_ranging()
+
+            displaydata['occ'] = d < 8190
+
+            if prev == displaydata['occ']: 
+                showdata()
+
+            try: 
+                time.sleep(1)
+            except KeyboardInterrupt:
+                this.stop_ranging()
+
+        print ("Exiting " + self.name)
+    def stop_ranging():
+        global tof
+        tof.stop_ranging()
+
+print("creating new thread")
+dist = distanceThread()
+dist.daemon = True
+dist.start()
+print("started new thread")
 
 try:
     while True:
@@ -186,9 +199,10 @@ try:
         dc = sum(degreec)/len(degreec)
         pr = sum(pressure)/len(pressure)
         poll(h, dc, pr)
+        showdata()
         time.sleep(tele_sleep)
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
-    GPIO.cleanup()
-
+    tof.stop_ranging()
+    sys.exit()
