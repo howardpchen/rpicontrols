@@ -196,7 +196,7 @@ class DistanceThread(threading.Thread):
             if (d < 500):
                 update_lcd()
             try: 
-                time.sleep(1)
+                time.sleep(0.5)
             except KeyboardInterrupt:
                 DistanceThread.stop_ranging()
     @staticmethod
