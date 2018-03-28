@@ -28,7 +28,7 @@ wemo_max = 30   #wemo_max * tele_sleep = max frequency of updating humidifier
 bme280.load_calibration_params(bus, address)
 
 # MQTT Configuration
-# Details for free MQTT service which we are registering data to.
+# Details for MQTT service which we are registering data to.
 thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  # 
 
 
@@ -153,7 +153,7 @@ button0=17
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(button0, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-def showdata():
+def update_lcd():
     global displaydata
     try:
         lcd = CharLCD('PCF8574', 0x3f)
@@ -176,14 +176,15 @@ def showdata():
 
 def buttondown(input_pin):
     if (input_pin == button0 and GPIO.input(button0) == 0):
-        showdata()
-        
-class distanceThread(threading.Thread):
-    def run(self):
+        update_lcd()
+
+class DistanceThread(threading.Thread):
+    @staticmethod
+    def run():
         global tof
         print ("Starting distance sensor thread")
         tof.start_ranging(VL53L0X.VL53L0X_BEST_ACCURACY_MODE)
-        while(True):
+        while True:
             d = tof.get_distance()
             ##print(">>>>%d mm distance" % d)
 
@@ -193,13 +194,12 @@ class distanceThread(threading.Thread):
                 tof.stop_ranging()
                 tof.start_ranging()
             if (d < 500):
-                showdata()
+                update_lcd()
             try: 
                 time.sleep(1)
             except KeyboardInterrupt:
-                this.stop_ranging()
-
-        print ("Exiting " + self.name)
+                DistanceThread.stop_ranging()
+    @staticmethod
     def stop_ranging():
         global tof
         tof.stop_ranging()

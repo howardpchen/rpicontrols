@@ -12,14 +12,23 @@ import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 import ssl, socket
 import json
-import config
+import config_rpi
 import sys
 tof = VL53L0X.VL53L0X()
 port = 1
 address = 0x76
 bus = smbus2.SMBus(port)
 
-tele_sleep = 10 # how often to send data to MQTT in seconds
+""" 
+Buffering mechanism for workstation occupancy - basically number builds up/down with each DistanceThread update
+Once reaching upper/lower limit threshold the actual occupancy status is changed.
+"""
+dist_tele_sleep = 0.5       # in seconds
+dist_occupied_max = 10      # multiplied by sleep duration for total threshold
+dist_occupied_counter = 0   # start with 0
+dist_occ_stat = False
+
+mqtt_tele_sleep = 10 # how often to send data to MQTT in seconds.
 
 bme280.load_calibration_params(bus, address)
 
@@ -27,21 +36,18 @@ bme280.load_calibration_params(bus, address)
 # Details for free MQTT service which we are registering data to.
 thingsboard_server = "hcthings.eastus.cloudapp.azure.com"  # 
 
-
-
 displaydata = dict()
 displaydata['occ'] = False
 
 def init_mqtt():
-    client=mqtt.Client()
     client = mqtt.Client()
 # Register connect callback
     client.on_connect = on_connect
 # Set access token
-    client.username_pw_set(config.token)
+    client.username_pw_set(config_rpi.token)
 # Connect to ThingsBoard using default MQTT port and 60 seconds keepalive interval
     no_conn = True
-    try: 
+    try:
         client.connect(thingsboard_server, 1883, 60)
     except:
         print("Cannot establish connection to MQTT server. Trying again later.")
@@ -53,7 +59,8 @@ def mqtt_publish(c, data):
     data_dict = {
         "humidity": data[0],
         "temperature": data[1],
-        "pressure": data[2]
+        "pressure": data[2],
+        "occupied": data[3]
     }
     result = c.publish('v1/devices/me/telemetry', json.dumps(data_dict), 1)
     if (result[0] != mqtt.MQTT_ERR_SUCCESS):
@@ -78,30 +85,25 @@ mqttc = init_mqtt();
 # compensated_reading object
 
 def poll(h, degreec, pres):
-    global mqttc, displaydata
+    global mqttc, displaydata, dist_occ_stat
 
     h_status = "OK"
-    t_status = "OK"
 
     if h < 40:
         h_status = "L"
     elif h > 60:
         h_status = "H"
 
-    #Correct for self-heating; approximately 2C  
+    #Correct for self-heating
     degreef = (degreec-2) * 9/5 + 32
-
-    if degreef < 68:
-        t_status = "L"
-    elif degreef > 76:
-        t_status = "H"
 
     displaydata['f'] = degreef
     displaydata['p'] = pres
     displaydata['h'] = h
     displaydata['hstat'] = h_status
+    displaydata['occ'] = dist_occ_stat
     if (mqttc):
-        mqttc = mqtt_publish(mqttc, (h, degreef, pres))
+        mqttc = mqtt_publish(mqttc, (h, degreef, pres, dist_occ_stat))
     else:
         mqttc = init_mqtt()
 
@@ -126,59 +128,60 @@ pressure = [pres]*samples
 
 counter = 0
 
-def showdata():
+def update_lcd(backlight_enabled=False):
     global displaydata, lcd
     try:
-        lcd = CharLCD('PCF8574', 0x3f)
+        #lcd = CharLCD('PCF8574', 0x3f, backlight_enabled=backlight_enabled)
+        lcd.backlight_enabled=backlight_enabled
         lcd.cursor_pos = (0, 0)
         lcd.write_string(" %2.1fF  %d%% Hum.  " % (displaydata['f'],
                                                    displaydata['h']))
         lcd.cursor_pos = (1, 0)
-        lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ']
-                         else "available "))
+        lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ'] else "available"))
     except KeyError:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
         lcd.write_string(" Initializing...   ")
         lcd.cursor_pos = (1, 0)
         lcd.write_string("                ")
-    # time.sleep(3)
-    # lcd.backlight_enabled = False
+
     lcd.close()
 
 
-class distanceThread(threading.Thread):
-    def run(self):
-        global tof
+class DistanceThread(threading.Thread):
+    @staticmethod
+    def run():
+        global tof, lcd, dist_occupied_counter, dist_occ_stat
         print ("Starting distance sensor thread")
         tof.start_ranging(VL53L0X.VL53L0X_BEST_ACCURACY_MODE)
-        while(True):
+        while True:
             d = tof.get_distance()
-            ##print(">>>>%d mm distance" % d)
-            # if less than 500 mm (i.e. 50 cm) then trigger
-            prev = displaydata['occ']
-            if (d < 0):
+
+            if d < 0:
                 print ("Error getting distance")
                 tof.stop_ranging()
                 tof.start_ranging()
-
-            displaydata['occ'] = d < 8190
-
-            if prev == displaydata['occ']: 
-                showdata()
+            else:
+                update_lcd(backlight_enabled=True if d < 50 else False)
+                dist_occupied_counter = max(min(dist_occupied_counter + (1 if d < 8190 else -1), dist_occupied_max), 0)
+                #print(dist_occupied_counter)
+                if dist_occupied_counter == dist_occupied_max:
+                    dist_occ_stat = True
+                elif dist_occupied_counter == 0:
+                    dist_occ_stat = False
 
             try: 
-                time.sleep(1)
+                time.sleep(0.5)
             except KeyboardInterrupt:
-                this.stop_ranging()
+                DistanceThread.stop_ranging()
 
-        print ("Exiting " + self.name)
+    @staticmethod
     def stop_ranging():
         global tof
         tof.stop_ranging()
 
 print("creating new thread")
-dist = distanceThread()
+dist = DistanceThread()
 dist.daemon = True
 dist.start()
 print("started new thread")
@@ -199,8 +202,7 @@ try:
         dc = sum(degreec)/len(degreec)
         pr = sum(pressure)/len(pressure)
         poll(h, dc, pr)
-        showdata()
-        time.sleep(tele_sleep)
+        time.sleep(mqtt_tele_sleep)
 except KeyboardInterrupt:
     print("\nUser interrupted - exiting...")
 finally:
