@@ -47,14 +47,6 @@ def show(h, degreec):
     lcd.cursor_pos = (1, 0)
     lcd.write_string(" H: %d %% (%s)    " % (h, h_status))
 
-# In[2]:
-
-
-
-
-# In[3]:
-
-
 lcd.cursor_pos = (0, 0)
 lcd.write_string(" Initializing...   ")
 lcd.cursor_pos = (1, 0)
@@ -75,7 +67,6 @@ counter = 0
 
 
 
-# In[9]:
 
 
 button0=27
