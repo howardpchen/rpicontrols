@@ -35,6 +35,7 @@ line 68:
 `tof_lib = CDLL("/home/pi/rpicontrols/VL53L0X_rasp_python/bin/vl53l0x_python.so")`
 
 You will want to copy the template config file to its own file, and populate it with thingsboard API key.
+
 `cp config_rpi.py.bak config_rpi.py`
 
 
