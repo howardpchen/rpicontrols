@@ -207,7 +207,7 @@ class DistanceThread(threading.Thread):
     
 GPIO.add_event_detect(button0, GPIO.FALLING, callback=buttondown, bouncetime=200)
 print("creating new thread")
-dist = distanceThread()
+dist = DistanceThread()
 dist.daemon = True
 dist.start()
 print("started new thread")
