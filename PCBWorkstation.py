@@ -134,10 +134,17 @@ def update_lcd(backlight_enabled=False):
         #lcd = CharLCD('PCF8574', 0x3f, backlight_enabled=backlight_enabled)
         lcd.backlight_enabled=backlight_enabled
         lcd.cursor_pos = (0, 0)
-        lcd.write_string(" %2.1fF  %d%% Hum.  " % (displaydata['f'],
-                                                   displaydata['h']))
+        lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
+                                              displaydata['p']))
         lcd.cursor_pos = (1, 0)
-        lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ'] else "available"))
+        lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
+                                                displaydata['hstat']))
+        
+        #lcd.cursor_pos = (0, 0)
+        #lcd.write_string(" %2.1fF  %d%% Hum.  " % (displaydata['f'],
+        #                                           displaydata['h']))
+        #lcd.cursor_pos = (1, 0)
+        #lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ'] else "available"))
     except KeyError:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
