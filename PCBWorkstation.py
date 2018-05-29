@@ -169,7 +169,7 @@ class DistanceThread(threading.Thread):
                 tof.stop_ranging()
                 tof.start_ranging()
             else:
-                update_lcd(backlight_enabled=True if d < 50 else False)
+                update_lcd(backlight_enabled=True if d < 450 else False)
                 dist_occupied_counter = max(min(dist_occupied_counter + (1 if d < 8190 else -1), dist_occupied_max), 0)
                 #print(dist_occupied_counter)
                 if dist_occupied_counter == dist_occupied_max:

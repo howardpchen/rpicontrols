@@ -14,6 +14,7 @@ import ssl, socket
 import json
 import config_rpi
 import sys
+import numpy as np
 tof = VL53L0X.VL53L0X()
 port = 1
 address = 0x76
@@ -134,17 +135,17 @@ def update_lcd(backlight_enabled=False):
         #lcd = CharLCD('PCF8574', 0x3f, backlight_enabled=backlight_enabled)
         lcd.backlight_enabled=backlight_enabled
         lcd.cursor_pos = (0, 0)
-        lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
-                                              displaydata['p']))
-        lcd.cursor_pos = (1, 0)
-        lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
-                                                displaydata['hstat']))
+        # lcd.write_string(" %2.1fF  %dhPa " % (displaydata['f'], 
+                                              # displaydata['p']))
+        # lcd.cursor_pos = (1, 0)
+        # lcd.write_string(" %d%% Hum. (%s)  " % (displaydata['h'],
+                                                # displaydata['hstat']))
         
-        #lcd.cursor_pos = (0, 0)
-        #lcd.write_string(" %2.1fF  %d%% Hum.  " % (displaydata['f'],
-        #                                           displaydata['h']))
-        #lcd.cursor_pos = (1, 0)
-        #lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ'] else "available"))
+        lcd.cursor_pos = (0, 0)
+        lcd.write_string(" %2.1fF  %d%% Hum.  " % (displaydata['f'],
+                                                  displaydata['h']))
+        lcd.cursor_pos = (1, 0)
+        lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ'] else "available"))
     except KeyError:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
@@ -154,6 +155,8 @@ def update_lcd(backlight_enabled=False):
 
     lcd.close()
 
+
+dist_array = [0] * (dist_occupied_max*2)
 
 class DistanceThread(threading.Thread):
     @staticmethod
@@ -169,10 +172,13 @@ class DistanceThread(threading.Thread):
                 tof.stop_ranging()
                 tof.start_ranging()
             else:
-                update_lcd(backlight_enabled=True if d < 50 else False)
-                dist_occupied_counter = max(min(dist_occupied_counter + (1 if d < 8190 else -1), dist_occupied_max), 0)
-                #print(dist_occupied_counter)
-                if dist_occupied_counter == dist_occupied_max:
+                update_lcd(backlight_enabled=True if d < 150 else False)
+                dist_occupied_counter = max(min(dist_occupied_counter + 
+                                    (1 if d < 2000 else -1), dist_occupied_max), 0)
+                dist_array.pop(0)
+                dist_array.append(d)
+                #print(dist_occupied_counter, np.std(dist_array), dist_array)
+                if dist_occupied_counter == dist_occupied_max and np.std(dist_array) > 10:
                     dist_occ_stat = True
                 elif dist_occupied_counter == 0:
                     dist_occ_stat = False
