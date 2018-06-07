@@ -4,6 +4,8 @@ from RPi import GPIO
 import VL53L0X
 import threading
 import time
+from datetime import datetime
+import math
 from subprocess import call, check_output
 import smbus2
 import bme280
@@ -20,14 +22,18 @@ port = 1
 address = 0x76
 bus = smbus2.SMBus(port)
 
+
 """ 
 Buffering mechanism for workstation occupancy - basically number builds up/down with each DistanceThread update
 Once reaching upper/lower limit threshold the actual occupancy status is changed.
 """
+dist_break_threshold = 120  # Timer threshold in seconds for taking a break
 dist_tele_sleep = 0.5       # in seconds
 dist_occupied_max = 10      # multiplied by sleep duration for total threshold
 dist_occupied_counter = 0   # start with 0
 dist_occ_stat = False
+
+dist_work_timer = datetime.today() # Timer for continuous period of occupancy at workstation
 
 mqtt_tele_sleep = 10 # how often to send data to MQTT in seconds.
 
@@ -130,8 +136,14 @@ pressure = [pres]*samples
 counter = 0
 
 def update_lcd(backlight_enabled=False):
-    global displaydata, lcd
+    global displaydata, lcd, dist_work_timer, dist_break_threshold
     try:
+        worktime = datetime.today() - dist_work_timer
+        break_timer = dist_break_threshold-worktime.seconds
+        
+
+        if break_timer < 0:
+            backlight_enabled = True
         #lcd = CharLCD('PCF8574', 0x3f, backlight_enabled=backlight_enabled)
         lcd.backlight_enabled=backlight_enabled
         lcd.cursor_pos = (0, 0)
@@ -146,6 +158,14 @@ def update_lcd(backlight_enabled=False):
                                                   displaydata['h']))
         lcd.cursor_pos = (1, 0)
         lcd.write_string("Wkstation: %s" % ("occupied " if displaydata['occ'] else "available"))
+        lcd.cursor_pos = (2, 0)
+        if (break_timer > 0):
+            lcd.write_string("Break time in " + str(math.ceil(break_timer/60)) +
+                             " min")
+        else:
+            lcd.write_string("Break overdue %s:%s" %
+                             (str(int(abs(break_timer)/60)),
+                              str(int(abs(break_timer)%60))))
     except KeyError:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
@@ -179,6 +199,8 @@ class DistanceThread(threading.Thread):
                 dist_array.append(d)
                 #print(dist_occupied_counter, np.std(dist_array), dist_array)
                 if dist_occupied_counter == dist_occupied_max and np.std(dist_array) > 10:
+                    if (dist_occ_stat == False):
+                        dist_work_timer = datetime.today()
                     dist_occ_stat = True
                 elif dist_occupied_counter == 0:
                     dist_occ_stat = False
