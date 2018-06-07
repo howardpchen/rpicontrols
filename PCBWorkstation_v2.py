@@ -27,9 +27,10 @@ bus = smbus2.SMBus(port)
 Buffering mechanism for workstation occupancy - basically number builds up/down with each DistanceThread update
 Once reaching upper/lower limit threshold the actual occupancy status is changed.
 """
-dist_break_threshold = 120  # Timer threshold in seconds for taking a break
+dist_break_threshold = 20*60  # Timer threshold in seconds for taking a break
 dist_tele_sleep = 0.5       # in seconds
-dist_occupied_max = 10      # multiplied by sleep duration for total threshold
+dist_occupied_max = 20      # multiplied by sleep duration for total threshold
+dist_sleep_duration = 0.5
 dist_occupied_counter = 0   # start with 0
 dist_occ_stat = False
 
@@ -163,9 +164,9 @@ def update_lcd(backlight_enabled=False):
             lcd.write_string("Break time in " + str(math.ceil(break_timer/60)) +
                              " min")
         else:
-            lcd.write_string("Break overdue %s:%s" %
-                             (str(int(abs(break_timer)/60)),
-                              str(int(abs(break_timer)%60))))
+            lcd.write_string("Break overdue %02d:%02d" %
+                             (int(abs(break_timer)/60),
+                              int(abs(break_timer)%60)))
     except KeyError:
         lcd = CharLCD('PCF8574', 0x3f)
         lcd.cursor_pos = (0, 0)
@@ -176,12 +177,12 @@ def update_lcd(backlight_enabled=False):
     lcd.close()
 
 
-dist_array = [0] * (dist_occupied_max*2)
+dist_array = [0] * int(dist_occupied_max*dist_sleep_duration)
 
 class DistanceThread(threading.Thread):
     @staticmethod
     def run():
-        global tof, lcd, dist_occupied_counter, dist_occ_stat
+        global tof, lcd, dist_occupied_counter, dist_occ_stat, dist_work_timer
         print ("Starting distance sensor thread")
         tof.start_ranging(VL53L0X.VL53L0X_BEST_ACCURACY_MODE)
         while True:
@@ -194,19 +195,20 @@ class DistanceThread(threading.Thread):
             else:
                 update_lcd(backlight_enabled=True if d < 150 else False)
                 dist_occupied_counter = max(min(dist_occupied_counter + 
-                                    (1 if d < 2000 else -1), dist_occupied_max), 0)
+                                    (1 if d < 2000 and np.std(dist_array)>5 else -1), dist_occupied_max), 0)
                 dist_array.pop(0)
                 dist_array.append(d)
                 #print(dist_occupied_counter, np.std(dist_array), dist_array)
-                if dist_occupied_counter == dist_occupied_max and np.std(dist_array) > 10:
+                if dist_occupied_counter == dist_occupied_max:
                     if (dist_occ_stat == False):
                         dist_work_timer = datetime.today()
                     dist_occ_stat = True
                 elif dist_occupied_counter == 0:
+                    dist_work_timer = datetime.today()
                     dist_occ_stat = False
 
             try: 
-                time.sleep(0.5)
+                time.sleep(dist_sleep_duration)
             except KeyboardInterrupt:
                 DistanceThread.stop_ranging()
 
