@@ -13,7 +13,7 @@ import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
 import ssl, socket
 import json
-import config
+import config_rpi
 import sys
 tof = VL53L0X.VL53L0X()
 port = 1
