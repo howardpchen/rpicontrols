@@ -40,7 +40,7 @@ def init_mqtt():
 # Register connect callback
     client.on_connect = on_connect
 # Set access token
-    client.username_pw_set(config.token)
+    client.username_pw_set(config_rpi.token)
 # Connect to ThingsBoard using default MQTT port and 60 seconds keepalive interval
     no_conn = True
     try: 
