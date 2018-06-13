@@ -32,7 +32,7 @@ dist_tele_sleep = 0.5       # in seconds
 dist_occupied_max = 20      # multiplied by sleep duration for total threshold
 dist_sleep_duration = 0.5
 dist_occupied_counter = 0   # start with 0
-dist_occ_stat = False
+dist_occ_stat = True
 
 dist_work_timer = datetime.today() # Timer for continuous period of occupancy at workstation
 
@@ -164,7 +164,7 @@ def update_lcd(backlight_enabled=False):
             lcd.write_string("Break time in " + str(math.ceil(break_timer/60)) +
                              " min")
         else:
-            lcd.write_string("Break overdue %02d:%02d" %
+            lcd.write_string("Break overdue %02d:%02d " %
                              (int(abs(break_timer)/60),
                               int(abs(break_timer)%60)))
     except KeyError:
@@ -195,7 +195,10 @@ class DistanceThread(threading.Thread):
             else:
                 update_lcd(backlight_enabled=True if d < 150 else False)
                 dist_occupied_counter = max(min(dist_occupied_counter + 
-                                    (1 if d < 2000 and np.std(dist_array)>5 else -1), dist_occupied_max), 0)
+                                    (1 if d < 1000 else -1), dist_occupied_max), 0)
+                #dist_occupied_counter = max(min(dist_occupied_counter + 
+                #                    (1 if d < 2000 and np.std(dist_array)>5 else -1), dist_occupied_max), 0)
+
                 dist_array.pop(0)
                 dist_array.append(d)
                 #print(dist_occupied_counter, np.std(dist_array), dist_array)
