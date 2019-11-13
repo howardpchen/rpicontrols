@@ -10,6 +10,9 @@ Required packages:
 `git pull`
 `sudo python3 setup.py install`
 
+## Or just install BME280 from pip
+`pip3 install RPi.bme280`
+
 ## Install Ouimeaux.git
 
 `pip install git+https://github.com/syphoxy/ouimeaux.git`
